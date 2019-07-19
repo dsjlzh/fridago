@@ -24,7 +24,7 @@ var log = logrus.New()
 func init() {
 	log.SetFormatter(&logrus.TextFormatter{})
 	log.SetOutput(os.Stdout)
-	log.SetLevel(logrus.DebugLevel)
+	log.SetLevel(logrus.WarnLevel)
 }
 
 func init() {
