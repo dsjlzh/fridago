@@ -1,0 +1,1 @@
+Put libfrida-core.a here.
