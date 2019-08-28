@@ -5,7 +5,6 @@ package fridago
 */
 import "C"
 import (
-	"errors"
 	"unsafe"
 
 	"github.com/sirupsen/logrus"
@@ -24,27 +23,31 @@ type Device struct {
 	Type uint
 }
 
-func (d *Device) PidOf(target string) (uint, error) {
+func (d *Device) PidOf(target string) (pid uint, err error) {
 	pl, err := d.EnumerateProcessesSync(target)
 	if err != nil {
-		return 0, err
+		return
 	}
+
 	if len(pl) > 0 {
-		return pl[0].Pid, nil
+		pid = pl[0].Pid
+	} else {
+		err = NewErrorAndLog("Device, target not found")
 	}
-	return 0, errors.New("Device, target not found")
+	return
 }
 
 func (d *Device) AttachPid(pid uint) (s *Session, err error) {
 	var gerr *C.GError
 	sess := C.frida_device_attach_sync(d.ptr, C.uint(pid), &gerr)
-	if gerr != nil || IsNullCPointer(unsafe.Pointer(sess)) {
-		return nil, errors.New("Device: attach error")
-	}
-	s = &Session{
-		ptr: sess,
-		Dev: d,
-		Pid: uint(C.frida_session_get_pid(sess)),
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+	} else {
+		s = &Session{
+			ptr: sess,
+			Dev: d,
+			Pid: uint(C.frida_session_get_pid(sess)),
+		}
 	}
 	return
 }
@@ -57,49 +60,53 @@ func (d *Device) Attach(target string) (s *Session, err error) {
 	log.WithFields(logrus.Fields{
 		"name": target,
 		"pid":  pid,
-	}).Debug("Device: attach process")
+	}).Info("Device: attach process")
 	return d.AttachPid(pid)
 }
 
 func (d *Device) Spawn(program string) (pid uint, err error) {
 	var gerr *C.GError
 	opts := C.frida_spawn_options_new()
-	pid = uint(C.frida_device_spawn_sync(d.ptr, C.CString(program), opts, &gerr))
-
 	defer func() {
 		C.frida_unref(C.gpointer(opts))
 		opts = nil
 	}()
 
-	if gerr != nil || uint(pid) == 0 {
-		return 0, errors.New("Device: spawn error")
+	pid = uint(C.frida_device_spawn_sync(d.ptr, C.CString(program), opts, &gerr))
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
 	}
 	return
 }
 
-func (d *Device) Resume(pid uint) error {
+func (d *Device) Resume(pid uint) (err error) {
 	var gerr *C.GError
 	C.frida_device_resume_sync(d.ptr, C.guint(pid), &gerr)
 	if gerr != nil {
-		return errors.New("Device: resume error")
+		err = NewErrorFromGError(gerr)
 	}
-	return nil
+	return
 }
 
-func (d *Device) Kill(pid uint) error {
+func (d *Device) Kill(pid uint) (err error) {
 	var gerr *C.GError
 	C.frida_device_kill_sync(d.ptr, C.guint(pid), &gerr)
 	if gerr != nil {
-		return errors.New("Device: kill error")
+		err = NewErrorFromGError(gerr)
 	}
-	return nil
+	return
 }
 
 func (d *Device) EnumerateProcessesSync(targetFilter ...string) (pl []*Process, err error) {
 	var gerr *C.GError
 	processes := C.frida_device_enumerate_processes_sync(d.ptr, &gerr)
-	if gerr != nil || IsNullCPointer(unsafe.Pointer(processes)) {
-		return nil, errors.New("Device: enumerate processes error")
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+	if IsNullCPointer(unsafe.Pointer(processes)) {
+		err = NewErrorAndLog("Device: enumerate processes error")
+		return
 	}
 
 	defer func() {
@@ -135,8 +142,12 @@ func (d *Device) EnumerateProcessesSync(targetFilter ...string) (pl []*Process, 
 func (d *Device) FindProcessByPidSync(pid uint) (p *Process, found bool, err error) {
 	var gerr *C.GError
 	proc := C.frida_device_find_process_by_pid_sync(d.ptr, C.guint(pid), &gerr)
-	if gerr != nil || IsNullCPointer(unsafe.Pointer(proc)) {
-		err = errors.New("Device: process not found")
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+	if IsNullCPointer(unsafe.Pointer(proc)) {
+		err = NewErrorAndLog("Device: process not found")
 		return
 	}
 	p = &Process{
@@ -151,8 +162,13 @@ func (d *Device) FindProcessByPidSync(pid uint) (p *Process, found bool, err err
 func (d *Device) EnumerateApplicationsSync() (al []*Application, err error) {
 	var gerr *C.GError
 	applications := C.frida_device_enumerate_applications_sync(d.ptr, &gerr)
-	if gerr != nil || IsNullCPointer(unsafe.Pointer(applications)) {
-		return nil, errors.New("Device: enumerate applications error")
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+	if IsNullCPointer(unsafe.Pointer(applications)) {
+		err = NewErrorAndLog("Device: enumerate applications error")
+		return
 	}
 
 	defer func() {
@@ -173,7 +189,7 @@ func (d *Device) EnumerateApplicationsSync() (al []*Application, err error) {
 			"name": a.Name,
 			"iden": a.Identifier,
 			"pid":  a.Pid,
-		}).Debug("add application")
+		}).Debug("found application")
 		al = append(al, a)
 	}
 	return

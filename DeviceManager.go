@@ -5,7 +5,6 @@ package fridago
 */
 import "C"
 import (
-	"errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,7 +20,7 @@ func (dm *DeviceManager) Init() (err error) {
 	if err != nil {
 		log.WithFields(logrus.Fields{
 			"err": err,
-		}).Fatal("DeviceManager: new fail")
+		}).Error("DeviceManager: new fail")
 	} else {
 		log.Info("DeviceManager: new ok")
 		dm.ptr = manager
@@ -40,7 +39,8 @@ func (dm *DeviceManager) EnumerateDevicesSync() (dl []*Device, err error) {
 	var gerr *C.GError
 	devices := C.frida_device_manager_enumerate_devices_sync(dm.ptr, &gerr)
 	if gerr != nil {
-		return nil, errors.New("DeviceManager: enumerate device error")
+		err = NewErrorFromGError(gerr)
+		return
 	}
 
 	defer func() {

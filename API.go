@@ -15,6 +15,7 @@ import "C"
 import (
 	"os"
 	"unsafe"
+	"errors"
 
 	"github.com/sirupsen/logrus"
 )
@@ -45,6 +46,33 @@ func init() {
 
 func IsNullCPointer(ptr unsafe.Pointer) bool {
 	return uintptr(ptr) == uintptr(0)
+}
+
+func GoBytesToGBytes(bytes []byte) (g *C.GBytes, ok bool) {
+	size := len(bytes)
+	g = C.g_bytes_new_take(C.gpointer(C.CBytes(bytes)), C.ulong(size))
+	if IsNullCPointer(unsafe.Pointer(g)) {
+		return nil, false
+	}
+	gSize := C.g_bytes_get_size(g)
+	if int(gSize) != size {
+		return nil, false
+	}
+
+	return g, true
+}
+
+func NewErrorFromGError(gerr *C.GError) error {
+	e := &GError{}
+	e.New(gerr)
+	log.Error(e)
+	return e
+}
+
+func NewErrorAndLog(errMsg string) error {
+	e := errors.New(errMsg)
+	log.Error(e)
+	return e
 }
 
 /*************
