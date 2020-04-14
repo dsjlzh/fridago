@@ -33,13 +33,14 @@ func (sess *Session) commCreateScript(name string, source interface{}, runtime [
 		gerr   *C.GError
 		script *C.FridaScript
 	)
+	cancel := C.g_cancellable_new()
 	switch src := source.(type) {
 	case string:
 		C.frida_script_options_set_runtime(opts, C.FRIDA_SCRIPT_RUNTIME_V8)
-		script = C.frida_session_create_script_sync(sess.ptr, C.CString(src), opts, &gerr)
+		script = C.frida_session_create_script_sync(sess.ptr, C.CString(src), opts, cancel, &gerr)
 	case []byte:
 		if gBytes, ok := GoBytesToGBytes(src); ok {
-			script = C.frida_session_create_script_from_bytes_sync(sess.ptr, gBytes, opts, &gerr)
+			script = C.frida_session_create_script_from_bytes_sync(sess.ptr, gBytes, opts, cancel, &gerr)
 		}
 	}
 
@@ -75,15 +76,24 @@ func (sess *Session) CreateScriptFromBytesSync(name string, bytes []byte, runtim
 	return sess.commCreateScript(name, bytes, runtime)
 }
 
-func (sess *Session) Detach() {
-	C.frida_session_detach_sync(sess.ptr)
+func (sess *Session) Detach() (err error) {
+	var gerr *C.GError
+	cancel := C.g_cancellable_new()
+	C.frida_session_detach_sync(sess.ptr, cancel, &gerr)
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+
 	C.frida_unref(C.gpointer(sess.ptr))
 	sess.ptr = nil
+	return
 }
 
 func (sess *Session) EnableChildGating() (err error) {
 	var gerr *C.GError
-	C.frida_session_enable_child_gating_sync(sess.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_session_enable_child_gating_sync(sess.ptr, cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 	}
@@ -92,7 +102,8 @@ func (sess *Session) EnableChildGating() (err error) {
 
 func (sess *Session) DisableChildGating() (err error) {
 	var gerr *C.GError
-	C.frida_session_disable_child_gating_sync(sess.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_session_disable_child_gating_sync(sess.ptr, cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 	}

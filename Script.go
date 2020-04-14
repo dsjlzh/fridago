@@ -136,7 +136,8 @@ func (scr *Script) On(sig string, cb chan *Message) (err error) {
 
 func (scr *Script) UnLoad() error {
 	var gerr *C.GError
-	C.frida_script_unload_sync(scr.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_script_unload_sync(scr.ptr, cancel, &gerr)
 	if gerr != nil {
 		return NewErrorFromGError(gerr)
 	}
@@ -147,7 +148,8 @@ func (scr *Script) UnLoad() error {
 
 func (scr *Script) Load() error {
 	var gerr *C.GError
-	C.frida_script_load_sync(scr.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_script_load_sync(scr.ptr, cancel, &gerr)
 	if gerr != nil {
 		return NewErrorFromGError(gerr)
 	}
@@ -156,7 +158,8 @@ func (scr *Script) Load() error {
 
 func (scr *Script) Eternalize() error {
 	var gerr *C.GError
-	C.frida_script_eternalize_sync(scr.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_script_eternalize_sync(scr.ptr, cancel, &gerr)
 	if gerr != nil {
 		return NewErrorFromGError(gerr)
 	}
@@ -166,7 +169,8 @@ func (scr *Script) Eternalize() error {
 func (scr *Script) Post(message string, data []byte) (err error) {
 	var gerr *C.GError
 	if gData, ok := GoBytesToGBytes(data); ok {
-		C.frida_script_post_sync(scr.ptr, C.CString(message), gData, &gerr)
+		cancel := C.g_cancellable_new()
+		C.frida_script_post_sync(scr.ptr, C.CString(message), gData, cancel, &gerr)
 	}
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)

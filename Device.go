@@ -39,7 +39,8 @@ func (d *Device) PidOf(target string) (pid uint, err error) {
 
 func (d *Device) AttachPid(pid uint) (s *Session, err error) {
 	var gerr *C.GError
-	sess := C.frida_device_attach_sync(d.ptr, C.uint(pid), &gerr)
+	cancel := C.g_cancellable_new()
+	sess := C.frida_device_attach_sync(d.ptr, C.uint(pid), cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 	} else {
@@ -72,7 +73,8 @@ func (d *Device) Spawn(program string) (pid uint, err error) {
 		opts = nil
 	}()
 
-	pid = uint(C.frida_device_spawn_sync(d.ptr, C.CString(program), opts, &gerr))
+	cancel := C.g_cancellable_new()
+	pid = uint(C.frida_device_spawn_sync(d.ptr, C.CString(program), opts, cancel, &gerr))
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 	}
@@ -81,7 +83,8 @@ func (d *Device) Spawn(program string) (pid uint, err error) {
 
 func (d *Device) Resume(pid uint) (err error) {
 	var gerr *C.GError
-	C.frida_device_resume_sync(d.ptr, C.guint(pid), &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_device_resume_sync(d.ptr, C.guint(pid), cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 	}
@@ -90,7 +93,8 @@ func (d *Device) Resume(pid uint) (err error) {
 
 func (d *Device) Kill(pid uint) (err error) {
 	var gerr *C.GError
-	C.frida_device_kill_sync(d.ptr, C.guint(pid), &gerr)
+	cancel := C.g_cancellable_new()
+	C.frida_device_kill_sync(d.ptr, C.guint(pid), cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 	}
@@ -99,7 +103,8 @@ func (d *Device) Kill(pid uint) (err error) {
 
 func (d *Device) EnumerateProcessesSync(targetFilter ...string) (pl []*Process, err error) {
 	var gerr *C.GError
-	processes := C.frida_device_enumerate_processes_sync(d.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	processes := C.frida_device_enumerate_processes_sync(d.ptr, cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 		return
@@ -141,7 +146,8 @@ func (d *Device) EnumerateProcessesSync(targetFilter ...string) (pl []*Process, 
 
 func (d *Device) FindProcessByPidSync(pid uint) (p *Process, found bool, err error) {
 	var gerr *C.GError
-	proc := C.frida_device_find_process_by_pid_sync(d.ptr, C.guint(pid), &gerr)
+	cancel := C.g_cancellable_new()
+	proc := C.frida_device_find_process_by_pid_sync(d.ptr, C.guint(pid), cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 		return
@@ -161,7 +167,8 @@ func (d *Device) FindProcessByPidSync(pid uint) (p *Process, found bool, err err
 
 func (d *Device) EnumerateApplicationsSync() (al []*Application, err error) {
 	var gerr *C.GError
-	applications := C.frida_device_enumerate_applications_sync(d.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	applications := C.frida_device_enumerate_applications_sync(d.ptr, cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 		return

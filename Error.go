@@ -4,6 +4,9 @@ package fridago
  #include "frida-core.h"
 */
 import "C"
+import (
+	"errors"
+)
 // Errors
 // AddressInUseError
 // ExecutableNotFoundError
@@ -32,3 +35,7 @@ func (err *GError) New(gerr *C.GError) {
 	err.Msg = C.GoString(gerr.message)
 	err.Code = int(gerr.code)
 }
+
+var (
+	ErrNoDevice = errors.New("No Device")
+)

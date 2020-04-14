@@ -28,16 +28,25 @@ func (dm *DeviceManager) Init() (err error) {
 	return
 }
 
-func (dm *DeviceManager) Close() {
+func (dm *DeviceManager) Close() (err error) {
 	log.Info("DeviceManager: Close")
-	C.frida_device_manager_close_sync(dm.ptr)
+	var gerr *C.GError
+	cancel := C.g_cancellable_new()
+	C.frida_device_manager_close_sync(dm.ptr, cancel, &gerr)
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+
 	C.frida_unref(C.gpointer(dm.ptr))
 	dm.ptr = nil
+	return
 }
 
 func (dm *DeviceManager) EnumerateDevicesSync() (dl []*Device, err error) {
 	var gerr *C.GError
-	devices := C.frida_device_manager_enumerate_devices_sync(dm.ptr, &gerr)
+	cancel := C.g_cancellable_new()
+	devices := C.frida_device_manager_enumerate_devices_sync(dm.ptr, cancel, &gerr)
 	if gerr != nil {
 		err = NewErrorFromGError(gerr)
 		return

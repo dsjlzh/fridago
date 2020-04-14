@@ -13,9 +13,10 @@ package fridago
 */
 import "C"
 import (
-	"os"
-	"unsafe"
 	"errors"
+	"os"
+	"time"
+	"unsafe"
 
 	"github.com/sirupsen/logrus"
 )
@@ -25,7 +26,7 @@ var log = logrus.New()
 func init() {
 	log.SetFormatter(&logrus.TextFormatter{})
 	log.SetOutput(os.Stdout)
-	log.SetLevel(logrus.WarnLevel)
+	log.SetLevel(logrus.DebugLevel)
 }
 
 func init() {
@@ -107,18 +108,18 @@ func EnumerateDevices() ([]*Device, error) {
 
 // get_device(id, timeout=0)
 func GetDevice(id string) (*Device, error) {
-	dl, err := GetDeviceMatching(func(d *Device) bool {
+	dl, _ := GetDeviceMatching(func(d *Device) bool {
 		return d.ID == id
 	}, 0)
 
 	if len(dl) > 0 {
 		return dl[0], nil
 	}
-	return nil, err
+	return nil, ErrNoDevice
 }
 
 // get_device_matching(predicate, timeout=0)
-func GetDeviceMatching(predicate func(*Device) bool, timeout int) (dl []*Device, err error) {
+func GetDeviceMatching(predicate func(*Device) bool, timeout time.Duration) (dl []*Device, err error) {
 	devices, err := EnumerateDevices()
 	if err != nil {
 		return
@@ -133,28 +134,28 @@ func GetDeviceMatching(predicate func(*Device) bool, timeout int) (dl []*Device,
 
 // get_local_device()
 func GetLocalDevice() (*Device, error) {
-	dl, err := GetDeviceMatching(func(d *Device) bool {
+	dl, _ := GetDeviceMatching(func(d *Device) bool {
 		return d.Type == DeviceTypeLocal
 	}, 0)
 
 	if len(dl) > 0 {
 		return dl[0], nil
 	}
-	return nil, err
+	return nil, ErrNoDevice
 }
 
 // get_remote_device()
 
 // get_usb_device(timeout=0)
 func GetUsbDevice() (*Device, error) {
-	dl, err := GetDeviceMatching(func(d *Device) bool {
+	dl, _ := GetDeviceMatching(func(d *Device) bool {
 		return d.Type == DeviceTypeUsb
 	}, 0)
 
 	if len(dl) > 0 {
 		return dl[0], nil
 	}
-	return nil, err
+	return nil, ErrNoDevice
 }
 
 // inject_library_blob(target, blob, entrypoint, data)
