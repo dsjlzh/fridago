@@ -1,1 +1,1 @@
-Put libfrida-core.a here.
+Put frida-core.h and libfrida-core.a here.

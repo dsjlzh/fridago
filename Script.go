@@ -2,6 +2,7 @@ package fridago
 
 /*
  #include "frida-core.h"
+ extern void _on_message(FridaScript * script, const gchar * message, GBytes * data, gpointer user_data);
 */
 import "C"
 import (
@@ -54,7 +55,7 @@ type rawMessage struct {
 }
 
 func init() {
-	chRawMessage = make(chan *rawMessage, 100)
+	chRawMessage = make(chan *rawMessage, 1000)
 	cbs = sync.Map{}
 	go msgDispatch()
 }
@@ -82,8 +83,7 @@ func msgDispatch() {
 		jsobj := make(map[string]interface{})
 		json.Unmarshal([]byte(rawMsg.msg), &jsobj)
 
-		tvpe := jsobj["type"].(string)
-		switch tvpe {
+		switch t := jsobj["type"].(string); t {
 		case "log":
 			level := jsobj["level"].(string)
 			text := jsobj["payload"].(string)
@@ -114,17 +114,24 @@ func msgDispatch() {
 	}
 }
 
+func (scr *Script) IsDestroyed() bool {
+	return GbooleanToGoBool(C.frida_script_is_destroyed(scr.ptr))
+}
+
 func (scr *Script) connectSignal(sig string, cb unsafe.Pointer) {
 	C.g_signal_connect_data(C.gpointer(scr.ptr),
 		C.CString(sig), C.GCallback(cb),
 		nil, nil, 0)
 }
 
-func (scr *Script) On(sig string, cb chan *Message) (err error) {
+func (scr *Script) On(sig string, ch interface{}) (err error) {
 	switch sig {
 	case "message":
-		key := fmt.Sprintf("%d_%s", scr.ID, sig)
-		cbs.Store(key, cb)
+		if v, ok := ch.(chan *Message); ok {
+			key := fmt.Sprintf("%d_%s", scr.ID, sig)
+			cbs.Store(key, v)
+		}
+		scr.connectSignal("message", unsafe.Pointer(C._on_message))
 	default:
 		err = NewErrorAndLog("Script: signal unspported")
 		log.WithFields(logrus.Fields{
@@ -210,6 +217,41 @@ func (scr *Script) RpcCall(js_name string, args ...string) (result interface{}, 
 			}
 		} else {
 			err = NewErrorAndLog(res.params[0].(string))
+		}
+	}
+	return
+}
+
+func NewScript(sess *Session, name string, source interface{}, runtime C.FridaScriptRuntime) (s *Script, err error) {
+	opts := C.frida_script_options_new()
+	defer func() {
+		C.frida_unref(C.gpointer(opts))
+		opts = nil
+	}()
+
+	C.frida_script_options_set_name(opts, C.CString(name))
+	C.frida_script_options_set_runtime(opts, runtime)
+
+	var (
+		gerr   *C.GError
+		script *C.FridaScript
+	)
+	cancel := C.g_cancellable_new()
+	switch src := source.(type) {
+	case string:
+		script = C.frida_session_create_script_sync(sess.ptr, C.CString(src), opts, cancel, &gerr)
+	case []byte:
+		if gBytes, ok := GoBytesToGBytes(src); ok {
+			script = C.frida_session_create_script_from_bytes_sync(sess.ptr, gBytes, opts, cancel, &gerr)
+		}
+	}
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+	} else if !IsNullCPointer(unsafe.Pointer(script)) {
+		s = &Script{
+			ptr:  script,
+			ID:   uint(C.frida_script_get_id(script)),
+			Name: name,
 		}
 	}
 	return

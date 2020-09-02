@@ -12,9 +12,7 @@ type DeviceManager struct {
 	ptr *C.FridaDeviceManager
 }
 
-// GetLocalDevice ...
-
-func (dm *DeviceManager) Init() (err error) {
+func (dm *DeviceManager) init() (err error) {
 	log.Info("DeviceManager: new ...")
 	manager, err := C.frida_device_manager_new()
 	if err != nil {
@@ -59,19 +57,46 @@ func (dm *DeviceManager) EnumerateDevicesSync() (dl []*Device, err error) {
 
 	n := int(C.frida_device_list_size(devices))
 	for i := 0; i < n; i++ {
-		device := C.frida_device_list_get(devices, C.int(i))
-		d := &Device{
-			ptr:  device,
-			Name: C.GoString(C.frida_device_get_name(device)),
-			ID:   C.GoString(C.frida_device_get_id(device)),
-			Type: uint(C.frida_device_get_dtype(device)),
-		}
+		fd := C.frida_device_list_get(devices, C.int(i))
+		d, _ := NewDevice(fd)
 		log.WithFields(logrus.Fields{
 			"name": d.Name,
 			"id":   d.ID,
 			"type": d.Type,
-		}).Debug("DeviceManager: add device")
+		}).Debug("DeviceManager: enumerate device")
 		dl = append(dl, d)
 	}
+	return
+}
+
+func (dm *DeviceManager) GetDeviceById(id string, timeout int) (d *Device, err error) {
+	var gerr *C.GError
+	cancel := C.g_cancellable_new()
+	dev := C.frida_device_manager_get_device_by_id_sync(dm.ptr, C.CString(id), C.gint(timeout), cancel, &gerr)
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+	return NewDevice(dev)
+}
+
+func (dm *DeviceManager) GetDeviceByType(dtype C.FridaDeviceType, timeout int) (d *Device, err error) {
+	var gerr *C.GError
+	cancel := C.g_cancellable_new()
+	dev := C.frida_device_manager_get_device_by_type_sync(dm.ptr, dtype, C.gint(timeout), cancel, &gerr)
+	if gerr != nil {
+		err = NewErrorFromGError(gerr)
+		return
+	}
+	return NewDevice(dev)
+}
+
+// todo:
+// add_remote_device
+// remove_remote_device
+
+func NewDeviceManager() (dm *DeviceManager, err error) {
+	dm = new(DeviceManager)
+	err = dm.init()
 	return
 }

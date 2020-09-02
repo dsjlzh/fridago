@@ -2,18 +2,30 @@
 package fridago
 
 /*
- #cgo CFLAGS: -g -O0 -w -I.
+ #cgo CFLAGS: -g -O2 -w -I. -I${SRCDIR}/libs
  #cgo LDFLAGS: -static-libgcc -L${SRCDIR}/libs -lfrida-core -ldl -lm -lrt -lresolv -lpthread -Wl,--export-dynamic
  #include "frida-core.h"
 
  // The gateway function
- void on_message(FridaScript * script, const gchar * message, GBytes * data, gpointer user_data) {
+ void _on_message(FridaScript * script, const gchar * message, GBytes * data, gpointer user_data) {
      onMessage(script, message, data, user_data);
+ }
+ void _on_spawn_added(FridaDevice * device, FridaSpawn * spawn, gpointer user_data) {
+     onSpawnAdded(device, spawn, user_data);
+ }
+ void _on_child_added(FridaDevice * device, FridaChild * child, gpointer user_data) {
+     onChildAdded(device, child, user_data);
+ }
+ void _on_output(FridaDevice * device, guint pid, gint fd, GBytes * data, gpointer user_data) {
+     onOutput(device, pid, fd, data, user_data);
+ }
+ void _on_file_change(FridaFileMonitor * file_monitor, gchar * path, gchar * other_path,
+                      GFileMonitorEvent event_type, gpointer user_data) {
+     onFileChange(file_monitor, path, other_path, event_type, user_data);
  }
 */
 import "C"
 import (
-	"errors"
 	"os"
 	"time"
 	"unsafe"
@@ -63,25 +75,28 @@ func GoBytesToGBytes(bytes []byte) (g *C.GBytes, ok bool) {
 	return g, true
 }
 
-func NewErrorFromGError(gerr *C.GError) error {
-	e := &GError{}
-	e.New(gerr)
-	log.Error(e)
-	return e
+func GStringsToGoStrings(gs **C.gchar, length C.gint) (strs []string, ok bool) {
+	len := int(length)
+	if len > 0 {
+		arr := (*[1 << 30]*C.gchar)(unsafe.Pointer(gs))
+		strs = make([]string, len)
+		for i := 0; i < len; i++ {
+			strs[i] = C.GoString(arr[i])
+		}
+		ok = true
+	}
+	return
 }
 
-func NewErrorAndLog(errMsg string) error {
-	e := errors.New(errMsg)
-	log.Error(e)
-	return e
+func GbooleanToGoBool(gb C.gboolean) bool {
+	return int(gb) != 0
 }
 
 /*************
  * Functions *
  *************/
 
-// attach(target)
-func Attach(target string) (*Session, error) {
+func Attach(target string) (sess *Session, err error) {
 	log.WithFields(logrus.Fields{
 		"target": target,
 	}).Debug("attach")
@@ -93,32 +108,23 @@ func Attach(target string) (*Session, error) {
 		"type": d.Type,
 	}).Debug("get local device")
 
-	sess, err := d.Attach(target)
+	p, err := d.FindProcessByNameSync(target, 10)
 	if err != nil {
-		return nil, err
+		return
 	}
-	return sess, nil
+	return d.Attach(p.Pid)
 }
 
-// enumerate_devices()
 func EnumerateDevices() ([]*Device, error) {
 	dm := GetDeviceManager()
 	return dm.EnumerateDevicesSync()
 }
 
-// get_device(id, timeout=0)
 func GetDevice(id string) (*Device, error) {
-	dl, _ := GetDeviceMatching(func(d *Device) bool {
-		return d.ID == id
-	}, 0)
-
-	if len(dl) > 0 {
-		return dl[0], nil
-	}
-	return nil, ErrNoDevice
+	dm := GetDeviceManager()
+	return dm.GetDeviceById(id, 10)
 }
 
-// get_device_matching(predicate, timeout=0)
 func GetDeviceMatching(predicate func(*Device) bool, timeout time.Duration) (dl []*Device, err error) {
 	devices, err := EnumerateDevices()
 	if err != nil {
@@ -132,51 +138,33 @@ func GetDeviceMatching(predicate func(*Device) bool, timeout time.Duration) (dl 
 	return
 }
 
-// get_local_device()
 func GetLocalDevice() (*Device, error) {
-	dl, _ := GetDeviceMatching(func(d *Device) bool {
-		return d.Type == DeviceTypeLocal
-	}, 0)
-
-	if len(dl) > 0 {
-		return dl[0], nil
-	}
-	return nil, ErrNoDevice
+	dm := GetDeviceManager()
+	return dm.GetDeviceByType(C.FRIDA_DEVICE_TYPE_LOCAL, 10)
 }
 
-// get_remote_device()
+func GetRemoteDevice() (*Device, error) {
+	dm := GetDeviceManager()
+	return dm.GetDeviceByType(C.FRIDA_DEVICE_TYPE_REMOTE, 10)
+}
 
-// get_usb_device(timeout=0)
 func GetUsbDevice() (*Device, error) {
-	dl, _ := GetDeviceMatching(func(d *Device) bool {
-		return d.Type == DeviceTypeUsb
-	}, 0)
-
-	if len(dl) > 0 {
-		return dl[0], nil
-	}
-	return nil, ErrNoDevice
+	dm := GetDeviceManager()
+	return dm.GetDeviceByType(C.FRIDA_DEVICE_TYPE_USB, 10)
 }
 
 // inject_library_blob(target, blob, entrypoint, data)
-
 // inject_library_file(target, path, entrypoint, data)
-
 // kill(target)
-
 // resume(target)
-
 // shutdown()
-
 // spawn(*args, **kwargs)
 
 var deviceManager *DeviceManager
 
-// get_device_manager()
 func GetDeviceManager() *DeviceManager {
 	if deviceManager == nil {
-		deviceManager = new(DeviceManager)
-		deviceManager.Init()
+		deviceManager, _ = NewDeviceManager()
 	}
 	return deviceManager
 }
