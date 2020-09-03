@@ -1,0 +1,4 @@
+* fridago
+A very simple demo of frida golang binding.
+
+A very simple demo of using fridago is at github.com/dsjlzh/fridago-demo.
